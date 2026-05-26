@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(python --version)",
+      "Bash(uv run *)",
+      "PowerShell(cd \"c:\\\\dev\\\\ai_agent\\\\twitter-schedule-post-skills\"; $env:PYTHONIOENCODING = \"utf-8\"; uv run python .claude/skills/x-batch-poster/scripts/check_env.py)"
+    ]
+  }
+}
