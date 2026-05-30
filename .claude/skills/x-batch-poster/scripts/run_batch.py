@@ -6,6 +6,9 @@ import time
 import traceback
 from datetime import datetime, timedelta
 
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 from gsheet_ops import fetch_next_pending_row, write_result, count_pending_rows
 from x_scheduler import XScheduler
 
@@ -98,8 +101,7 @@ def process_single_row(
             return "scheduled"
         except RuntimeError as e:
             last_error = str(e)
-            if "ログイン" in last_error:
-                # ログイン失敗は即座に全体停止
+            if "ログインを確認していません" in last_error or "ログインされていません" in last_error:
                 raise
             if "レートリミット" in last_error or "rate" in last_error.lower():
                 print(f"  レートリミット検知、{RATE_LIMIT_WAIT}秒待機...")
@@ -114,16 +116,16 @@ def process_single_row(
     write_result(spreadsheet_id, sheet_name, row_number, "failed", last_error)
     return "failed"
 
+
 def test():
     """簡単なテスト関数."""
-    print("テスト関数が呼び出されました。ログイン＋1件の予約投稿をテストします。")
-    # ブラウザ起動＆ログイン（headless=Falseで画面を表示）
-    scheduler = XScheduler(headless=False)
+    print("テスト関数が呼び出されました。X.comへの接続確認＋1件の予約投稿をテストします。")
+    scheduler = XScheduler()
     try:
         scheduler.start()
-        print("\nX.comにログイン中...")
-        scheduler.login()
-        print("✓ ログイン成功\n")
+        print("\nX.com ログイン確認中...")
+        scheduler.ensure_logged_in()
+        print("✓ ログイン確認成功\n")
 
         scheduler.schedule_post(
             text="test",
@@ -154,18 +156,13 @@ def main():
         help="シート名 (default: Sheet1)",
     )
     parser.add_argument(
-        "--headless",
-        action="store_true",
-        default=True,
-        help="ヘッドレスモード (default: True)",
-    )
-    parser.add_argument(
-        "--no-headless",
-        action="store_false",
-        dest="headless",
-        help="ブラウザを表示して実行",
+        "--test", action="store_true", help="テストモード: ログイン確認と1件の予約投稿テストを実行"
     )
     args = parser.parse_args()
+
+    if args.test:
+        test()
+        return
 
     if not args.spreadsheet_id:
         print("エラー: --spreadsheet-id または SPREADSHEET_ID 環境変数を指定してください")
@@ -180,15 +177,15 @@ def main():
         print("処理対象の行がありません。")
         sys.exit(0)
 
-    # ブラウザ起動＆ログイン
-    scheduler = XScheduler(headless=args.headless)
+    # Chrome に接続してログイン確認
+    scheduler = XScheduler()
     results = {"scheduled": 0, "failed": 0, "skipped": 0}
 
     try:
         scheduler.start()
-        print("\nX.comにログイン中...")
-        scheduler.login()
-        print("✓ ログイン成功\n")
+        print("\nX.com ログイン確認中...")
+        scheduler.ensure_logged_in()
+        print("✓ ログイン確認成功\n")
 
         # メインループ
         processed = 0
@@ -204,7 +201,7 @@ def main():
                 )
                 results[result] += 1
             except RuntimeError as e:
-                if "ログイン" in str(e):
+                if "ログインを確認していません" in str(e) or "ログインされていません" in str(e):
                     print(f"\n致命的エラー: {e}")
                     print("バッチを中断します。")
                     break
@@ -238,4 +235,4 @@ def main():
 
 
 if __name__ == "__main__":
-    test()
+    main()

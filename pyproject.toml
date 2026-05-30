@@ -7,6 +7,5 @@ dependencies = [
     "google-auth>=2.53.0",
     "gspread>=6.2.1",
     "playwright>=1.60.0",
-    "pyotp>=2.9.0",
     "python-dotenv>=1.2.2",
 ]

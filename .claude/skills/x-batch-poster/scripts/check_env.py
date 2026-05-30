@@ -3,6 +3,9 @@ import importlib
 import os
 import sys
 
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 
 def check_python_packages():
     """必要なPythonパッケージの存在確認."""
@@ -20,25 +23,26 @@ def check_python_packages():
     return missing
 
 
-def check_playwright_browsers():
-    """Playwrightブラウザのインストール確認."""
-    try:
-        from playwright.sync_api import sync_playwright
-        with sync_playwright() as p:
-            p.chromium.launch(headless=True).close()
-        return True
-    except Exception:
-        return False
+def check_chrome_cdp_connection() -> tuple[bool, str]:
+    """Chrome CDPへの接続確認."""
+    import sys
+    scripts_dir = os.path.dirname(os.path.abspath(__file__))
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
+    from chrome_attacher import ChromeAttacher
+
+    attacher = ChromeAttacher()
+    cdp_url = attacher.cdp_url
+    if attacher.is_reachable():
+        return True, cdp_url
+    return False, f"{cdp_url} に応答なし\n  {ChromeAttacher.launch_hint()}"
 
 
 def check_env_vars():
     """必要な環境変数の確認."""
-    required = ["X_EMAIL", "X_PASSWORD"]
-    recommended = ["GOOGLE_SERVICE_ACCOUNT_KEY_PATH", "SPREADSHEET_ID"]
-
-    missing_required = [v for v in required if not os.environ.get(v)]
+    recommended = ["GOOGLE_SERVICE_ACCOUNT_KEY_PATH", "SPREADSHEET_ID", "CHROME_CDP_URL"]
     missing_recommended = [v for v in recommended if not os.environ.get(v)]
-    return missing_required, missing_recommended
+    return missing_recommended
 
 
 def check_google_credentials():
@@ -56,7 +60,7 @@ def main():
     errors = []
 
     # 1. Pythonパッケージ
-    print("\n[1/4] Pythonパッケージ...")
+    print("\n[1/3] Pythonパッケージ...")
     missing_packages = check_python_packages()
     if missing_packages:
         errors.append(f"pip install {' '.join(missing_packages)}")
@@ -64,30 +68,28 @@ def main():
     else:
         print("  ✓ すべてインストール済み")
 
-    # 2. Playwrightブラウザ
-    print("\n[2/4] Playwrightブラウザ...")
+    # 2. Chrome CDP接続
+    print("\n[2/3] Chrome CDP接続...")
     if not missing_packages or "playwright" not in " ".join(missing_packages):
-        if check_playwright_browsers():
-            print("  ✓ Chromiumインストール済み")
+        ok, detail = check_chrome_cdp_connection()
+        if ok:
+            print(f"  ✓ 接続成功: {detail}")
         else:
-            errors.append("playwright install chromium")
-            print("  ✗ Chromium未インストール → playwright install chromium")
+            errors.append(detail)
+            print(f"  ✗ {detail}")
+        # 推奨環境変数
+        missing_rec = check_env_vars()
+        if missing_rec:
+            filtered = [v for v in missing_rec if v != "CHROME_CDP_URL"]
+            if "CHROME_CDP_URL" in missing_rec:
+                print("  △ CHROME_CDP_URL 未設定（DevToolsActivePort から自動検出します）")
+            if filtered:
+                print(f"  △ 推奨: {', '.join(filtered)}（コマンド引数で指定も可）")
     else:
-        print("  - スキップ（playwright未インストール）")
+        print("  - スキップ（playwright 未インストール）")
 
-    # 3. 環境変数
-    print("\n[3/4] 環境変数...")
-    missing_req, missing_rec = check_env_vars()
-    if missing_req:
-        errors.append(f"環境変数を設定: {', '.join(missing_req)}")
-        print(f"  ✗ 必須: {', '.join(missing_req)}")
-    else:
-        print("  ✓ 必須変数はすべて設定済み")
-    if missing_rec:
-        print(f"  △ 推奨: {', '.join(missing_rec)}（コマンド引数で指定も可）")
-
-    # 4. Google認証情報
-    print("\n[4/4] Google認証情報...")
+    # 3. Google認証情報
+    print("\n[3/3] Google認証情報...")
     exists, path = check_google_credentials()
     if exists:
         print(f"  ✓ 鍵ファイル: {path}")
