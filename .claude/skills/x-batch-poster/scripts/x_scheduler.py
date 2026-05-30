@@ -1,8 +1,10 @@
 """X.com Web UI予約投稿モジュール: Playwrightによる操作.
 
-X.comのUI変更に対応するため、セレクタは x_selectors.py に集約。
+ユーザーが開いているChromeにCDP（Chrome DevTools Protocol）で接続して操作する。
+Chrome は --remote-debugging-port フラグ付きで起動し、X.comにログイン済みであること。
+
 操作フロー:
-  1. ログイン（初回のみ）
+  1. ログイン確認（未ログイン時はエラー）
   2. 投稿作成画面を開く
   3. テキストを入力
   4. メディアがあれば添付
@@ -10,6 +12,7 @@ X.comのUI変更に対応するため、セレクタは x_selectors.py に集約
   6. 予約確定
 """
 import os
+import platform
 import time
 from datetime import datetime
 from pathlib import Path
@@ -26,14 +29,6 @@ from playwright.sync_api import (
 # セレクタ定義（UI変更時はここを更新）
 # 最新のセレクタは references/x-selectors.md も参照
 SELECTORS = {
-    # ログイン
-    "login_email_input": 'input[autocomplete="username"]',
-    "login_next_button": 'button:has-text("Next"), button:has-text("次へ")',
-    "login_password_input": 'input[type="password"]',
-    "login_submit_button": 'button[data-testid="LoginForm_Login_Button"]',
-    "2fa_input": 'input[data-testid="ocfEnterTextTextInput"]',
-    "2fa_next_button": 'button[data-testid="ocfEnterTextNextButton"]',
-
     # 投稿
     "tweet_textbox": 'div[data-testid="tweetTextarea_0"]',
     "schedule_button": 'button[data-testid="scheduleOption"]',
@@ -59,98 +54,93 @@ SELECTORS = {
     "toast_success": 'div[data-testid="toast"]',
 }
 
-# セッション保存先
-SESSION_DIR = Path.home() / ".x-batch-poster" / "session"
-
 
 class XScheduler:
-    """X.comの投稿予約をPlaywrightで操作するクラス."""
+    """X.comの投稿予約をPlaywrightで操作するクラス.
 
-    def __init__(self, headless: bool = True):
-        self.headless = headless
+    ユーザーが起動済みのChromeにCDPで接続して操作する。
+    Chrome は --remote-debugging-port フラグ付きで起動されていること。
+    """
+
+    def __init__(self):
         self._playwright = None
         self._browser: Optional[Browser] = None
         self._context: Optional[BrowserContext] = None
         self._page: Optional[Page] = None
         self._logged_in = False
 
-    def start(self):
-        """ブラウザを起動."""
-        self._playwright = sync_playwright().start()
-        SESSION_DIR.mkdir(parents=True, exist_ok=True)
+    @staticmethod
+    def _get_cdp_url() -> str:
+        """CDPのURLを取得する.
 
-        self._context = self._playwright.chromium.launch_persistent_context(
-            user_data_dir=str(SESSION_DIR),
-            headless=self.headless,
-            viewport={"width": 1280, "height": 900},
-            locale="ja-JP",
-            timezone_id="Asia/Tokyo",
-        )
+        優先順位:
+        1. 環境変数 CHROME_CDP_URL
+        2. DevToolsActivePort ファイルから自動検出（記事の手法）
+        3. デフォルト http://localhost:9222
+        """
+        env_url = os.environ.get("CHROME_CDP_URL", "")
+        if env_url:
+            return env_url
+
+        if platform.system() == "Windows":
+            user_data = os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\User Data")
+        elif platform.system() == "Darwin":
+            user_data = os.path.expanduser("~/Library/Application Support/Google/Chrome")
+        else:
+            user_data = os.path.expanduser("~/.config/google-chrome")
+
+        port_file = Path(user_data) / "DevToolsActivePort"
+        if port_file.exists():
+            port = port_file.read_text().splitlines()[0].strip()
+            return f"http://localhost:{port}"
+
+        return "http://localhost:9222"
+
+    def start(self):
+        """ユーザーのChromeにCDPで接続する."""
+        self._playwright = sync_playwright().start()
+        cdp_url = self._get_cdp_url()
+        try:
+            self._browser = self._playwright.chromium.connect_over_cdp(cdp_url)
+        except Exception as e:
+            raise RuntimeError(
+                f"Chrome に接続できませんでした（{cdp_url}）\n"
+                "Chrome をリモートデバッグポート付きで起動してください:\n"
+                r'  "C:\Program Files\Google\Chrome\Application\chrome.exe"'
+                " --remote-debugging-port=9222\n"
+                f"詳細: {e}"
+            ) from e
+
+        if not self._browser.contexts:
+            raise RuntimeError("Chrome のコンテキストが見つかりません")
+        self._context = self._browser.contexts[0]
         self._page = self._context.new_page()
 
     def stop(self):
-        """ブラウザを終了."""
-        if self._context:
-            self._context.close()
+        """操作用ページを閉じる（ブラウザは閉じない）."""
+        if self._page:
+            self._page.close()
         if self._playwright:
             self._playwright.stop()
 
-    def login(self) -> bool:
-        """X.comにログイン（既にログイン済みならスキップ）.
+    def ensure_logged_in(self) -> bool:
+        """X.comにログイン済みか確認する（ログインは行わない）.
 
-        Returns: ログイン成功ならTrue
-        Raises: RuntimeError on failure
+        Returns: ログイン済みなら True
+        Raises: RuntimeError if not logged in
         """
         page = self._page
         page.goto("https://x.com/home", wait_until="networkidle", timeout=30000)
         time.sleep(2)
 
-        # 既にログイン済みか確認
         if page.query_selector(SELECTORS["home_indicator"]):
             self._logged_in = True
             return True
 
-        # ログインページへ
-        page.goto("https://x.com/i/flow/login", wait_until="networkidle", timeout=30000)
-        time.sleep(2)
-
-        email = os.environ.get("X_EMAIL", "")
-        password = os.environ.get("X_PASSWORD", "")
-        if not email or not password:
-            raise RuntimeError("X_EMAIL / X_PASSWORD 環境変数が未設定です")
-
-        # メールアドレス入力
-        page.wait_for_selector(SELECTORS["login_email_input"], timeout=15000)
-        page.fill(SELECTORS["login_email_input"], email)
-        page.click(SELECTORS["login_next_button"])
-        time.sleep(2)
-
-        # パスワード入力
-        page.wait_for_selector(SELECTORS["login_password_input"], timeout=15000)
-        page.fill(SELECTORS["login_password_input"], password)
-        page.click(SELECTORS["login_submit_button"])
-        time.sleep(3)
-
-        # 2FA確認
-        twofa_secret = os.environ.get("X_2FA_SECRET", "")
-        if twofa_secret and page.query_selector(SELECTORS["2fa_input"]):
-            try:
-                import pyotp
-                totp = pyotp.TOTP(twofa_secret)
-                code = totp.now()
-                page.fill(SELECTORS["2fa_input"], code)
-                page.click(SELECTORS["2fa_next_button"])
-                time.sleep(3)
-            except ImportError:
-                raise RuntimeError("2FAが要求されましたが pyotp がインストールされていません")
-
-        # ログイン成功確認
-        try:
-            page.wait_for_selector(SELECTORS["home_indicator"], timeout=15000)
-            self._logged_in = True
-            return True
-        except PlaywrightTimeout:
-            raise RuntimeError("ログインに失敗しました。認証情報を確認してください。")
+        raise RuntimeError(
+            "X.com にログインされていません。\n"
+            "Chrome で https://x.com にアクセスしてログインしてから再実行してください。"
+        )
 
     def schedule_post(
         self,
@@ -165,15 +155,15 @@ class XScheduler:
             scheduled_at: 予約日時 (JST)
             media_paths: ローカルの画像/動画ファイルパスのリスト
 
-        Returns: 成功ならTrue
+        Returns: 成功なら True
         Raises: RuntimeError on failure
         """
         if not self._logged_in:
-            raise RuntimeError("ログインしていません。先にlogin()を呼んでください。")
+            raise RuntimeError("ログインを確認していません。先に ensure_logged_in() を呼んでください。")
 
         page = self._page
 
-        # 投稿作成画面を開く（compose tweetのURL）
+        # 投稿作成画面を開く
         page.goto("https://x.com/compose/tweet", wait_until="networkidle", timeout=20000)
         time.sleep(2)
 
@@ -182,7 +172,6 @@ class XScheduler:
         if not textbox:
             raise RuntimeError("投稿テキストボックスが見つかりません")
         textbox.click()
-        # type()で1文字ずつ入力（自然な入力を模倣）
         page.keyboard.type(text, delay=30)
         time.sleep(1)
 
@@ -191,7 +180,7 @@ class XScheduler:
             file_input = page.query_selector(SELECTORS["media_input"])
             if file_input:
                 file_input.set_input_files(media_paths)
-                time.sleep(3)  # アップロード待ち
+                time.sleep(3)
 
         # 予約ボタンをクリック
         schedule_btn = page.wait_for_selector(SELECTORS["schedule_button"], timeout=10000)
@@ -221,8 +210,6 @@ class XScheduler:
             submit_btn.click()
             time.sleep(3)
 
-        # 成功確認（トースト通知またはURL変化）
-        # トーストが出なくてもエラーがなければ成功とみなす
         return True
 
     def _set_schedule_datetime(self, page: Page, dt: datetime):
@@ -232,7 +219,6 @@ class XScheduler:
         UIの変更頻度が高いため、セレクタが見つからない場合は
         代替手段（直接入力など）を試みる。
         """
-        # 各フィールドをselect要素として操作
         selects = {
             "month": (SELECTORS["schedule_month_select"], str(dt.month)),
             "day": (SELECTORS["schedule_day_select"], str(dt.day)),
@@ -248,12 +234,10 @@ class XScheduler:
                     el.select_option(value=value)
                     time.sleep(0.3)
             except PlaywrightTimeout:
-                # セレクタが見つからない場合、UIが変更された可能性
                 print(
                     f"  警告: {field_name}のセレクタが見つかりません。"
                     f"references/x-selectors.md を確認してください。"
                 )
-                # select要素ではなくカスタムUIの可能性 → フォールバック
                 self._try_fallback_datetime_input(page, field_name, value)
 
     def _try_fallback_datetime_input(
@@ -264,9 +248,5 @@ class XScheduler:
         X.comがカスタムUIに変更した場合に備える。
         具体的なフォールバック戦略はUI変更時に実装する。
         """
-        print(
-            f"  フォールバック: {field_name}={value} の設定を試行中..."
-        )
-        # ここはUI変更時に具体的な処理を追加する
-        # 現時点では警告のみ
+        print(f"  フォールバック: {field_name}={value} の設定を試行中...")
         pass

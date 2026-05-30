@@ -14,26 +14,42 @@ description: >
 Google Spreadsheetから投稿データを読み取り、X.comのWeb UI上で予約投稿を設定するスキル。
 実際の投稿はX.comが予約日時に自動実行する。API非公開の予約機能をPlaywrightで操作する。
 
+ユーザーのChromeブラウザにCDP（Chrome DevTools Protocol）で接続して操作するため、
+X.comへのログインはユーザーのChromeで済んでいる状態が前提。
+
 ## 前提条件
 
 ### 必須ソフトウェア
 - Python 3.10+
-- Playwright (`pip install playwright && playwright install chromium`)
-- gspread + google-auth (`pip install gspread google-auth`)
+- Playwright (`uv add playwright`)
+- gspread + google-auth (`uv add gspread google-auth`)
+
+### Chrome の準備
+
+デバッグポートを有効にして Chrome を起動し、X.com にログインしておく。
+
+**Windows の場合（既存の Chrome をすべて閉じてから実行）:**
+```
+"C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222
+```
+
+または DevToolsActivePort 自動検出（ポートをランダム割り当て）:
+```
+"C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=0
+```
+
+起動後、Chrome で https://x.com にアクセスしてログインしておくこと。
 
 ### 認証情報
 - **Google**: サービスアカウントのJSON鍵ファイル → `references/gsheet-setup.md` を参照
-- **X.com**: 環境変数 `X_EMAIL`, `X_PASSWORD` にログイン情報を設定
-  - 2FA有効時は `X_2FA_SECRET` にTOTPシークレットを設定（pyotpで生成）
 
 ### 環境変数一覧
 ```
 GOOGLE_SERVICE_ACCOUNT_KEY_PATH=./credentials.json
 SPREADSHEET_ID=<Google SpreadsheetのID>
 SHEET_NAME=Sheet1
-X_EMAIL=your@email.com
-X_PASSWORD=yourpassword
-X_2FA_SECRET=JBSWY3DPEHPK3PXP   # 2FA有効時のみ
+# Chrome のリモートデバッグ URL（省略時は DevToolsActivePort から自動検出）
+# CHROME_CDP_URL=http://localhost:9222
 ```
 
 ## Spreadsheetの列仕様
@@ -59,19 +75,19 @@ X_2FA_SECRET=JBSWY3DPEHPK3PXP   # 2FA有効時のみ
 
 ### Step 1: 環境チェック
 ```bash
-python scripts/check_env.py
+uv run python scripts/check_env.py
 ```
-不足があれば指示を出して停止。
+不足があれば指示を出して停止。Chrome が未接続の場合は起動手順を案内する。
 
 ### Step 2: バッチ実行
 ```bash
-python scripts/run_batch.py --max-rows <N> --spreadsheet-id <ID> --sheet-name <SHEET>
+uv run python scripts/run_batch.py --max-rows <N> --spreadsheet-id <ID> --sheet-name <SHEET>
 ```
 
 内部処理:
 1. Spreadsheetから status が空 or `pending` の行を上から1行取得
 2. バリデーション（テキスト空チェック、日時の未来チェック）
-3. Playwrightで X.com にログイン（初回のみ、以降はセッション再利用）
+3. ユーザーの Chrome に CDP で接続し、X.com のログイン状態を確認（未ログインなら即停止）
 4. 投稿画面を開き、テキスト入力 → 予約日時設定 → 確定
 5. 結果を Spreadsheet の status / executed_at / error_detail 列に書き戻す
 6. 最大行数まで 1〜5 を繰り返す
@@ -79,10 +95,20 @@ python scripts/run_batch.py --max-rows <N> --spreadsheet-id <ID> --sheet-name <S
 ### Step 3: 結果報告
 完了後、サマリーを出力する（成功/失敗/スキップの件数）。
 
+## テスト時の実行フロー
+
+ユーザーからテストしてという指示があったら、以下を実行する。
+
+### Step 1: テストの実行
+```bash
+uv run python scripts/run_batch.py --test
+```
+
 ## エラーハンドリング方針
 - **1行の失敗で全体を止めない** — status=failed を記録して次の行へ進む
 - **ネットワークエラー** — 1行あたり最大3回リトライ（5秒間隔）
-- **X.comログイン失敗** — 即座に全体停止（認証情報の問題のため続行不可）
+- **X.com 未ログイン** — 即座に全体停止。Chrome で X.com にログインして再実行
+- **Chrome 未接続** — 即座に停止。--remote-debugging-port 付きで Chrome を再起動
 - **レートリミット検知** — 30秒待機してリトライ
 - **セレクタ不一致** — X.comのUI変更の可能性あり → `references/x-selectors.md` を参照して更新
 
