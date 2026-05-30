@@ -2,7 +2,6 @@
 import importlib
 import os
 import sys
-from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 sys.stderr.reconfigure(encoding="utf-8", errors="replace")
@@ -24,40 +23,19 @@ def check_python_packages():
     return missing
 
 
-def _get_cdp_url() -> str:
-    """CDPのURLを取得（x_scheduler._get_cdp_url と同じロジック）."""
-    import platform
-
-    env_url = os.environ.get("CHROME_CDP_URL", "")
-    if env_url:
-        return env_url
-
-    if platform.system() == "Windows":
-        user_data = os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\User Data")
-    elif platform.system() == "Darwin":
-        user_data = os.path.expanduser("~/Library/Application Support/Google/Chrome")
-    else:
-        user_data = os.path.expanduser("~/.config/google-chrome")
-
-    port_file = Path(user_data) / "DevToolsActivePort"
-    if port_file.exists():
-        port = port_file.read_text().splitlines()[0].strip()
-        return f"http://localhost:{port}"
-
-    return "http://localhost:9222"
-
-
 def check_chrome_cdp_connection() -> tuple[bool, str]:
     """Chrome CDPへの接続確認."""
-    cdp_url = _get_cdp_url()
-    try:
-        from playwright.sync_api import sync_playwright
-        with sync_playwright() as p:
-            browser = p.chromium.connect_over_cdp(cdp_url, timeout=5000)
-            browser.close()
+    import sys
+    scripts_dir = os.path.dirname(os.path.abspath(__file__))
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
+    from chrome_attacher import ChromeAttacher
+
+    attacher = ChromeAttacher()
+    cdp_url = attacher.cdp_url
+    if attacher.is_reachable():
         return True, cdp_url
-    except Exception as e:
-        return False, f"{cdp_url} への接続失敗: {e}"
+    return False, f"{cdp_url} に応答なし\n  {ChromeAttacher.launch_hint()}"
 
 
 def check_env_vars():
@@ -97,16 +75,8 @@ def main():
         if ok:
             print(f"  ✓ 接続成功: {detail}")
         else:
-            errors.append(
-                "Chrome をリモートデバッグポート付きで起動してください:\n"
-                r'     "C:\Program Files\Google\Chrome\Application\chrome.exe"'
-                " --remote-debugging-port=9222"
-            )
+            errors.append(detail)
             print(f"  ✗ {detail}")
-            print(
-                "  → Chrome を --remote-debugging-port=9222 付きで起動し、"
-                "X.com にログインしてください"
-            )
         # 推奨環境変数
         missing_rec = check_env_vars()
         if missing_rec:
