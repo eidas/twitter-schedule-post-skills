@@ -54,14 +54,26 @@ def check_google_credentials():
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="X Batch Poster 環境チェック")
+    parser.add_argument(
+        "--skip-gsheet",
+        action="store_true",
+        help="Google Spreadsheet関連のチェックをスキップ（単発投稿モード用）",
+    )
+    args = parser.parse_args()
+
     print("=" * 50)
     print("X Batch Poster - 環境チェック")
     print("=" * 50)
     errors = []
 
     # 1. Pythonパッケージ
+    gsheet_packages = {"gspread", "google-auth"}
     print("\n[1/3] Pythonパッケージ...")
     missing_packages = check_python_packages()
+    if args.skip_gsheet:
+        missing_packages = [p for p in missing_packages if p not in gsheet_packages]
     if missing_packages:
         errors.append(f"pip install {' '.join(missing_packages)}")
         print(f"  ✗ 不足: {', '.join(missing_packages)}")
@@ -81,6 +93,8 @@ def main():
         missing_rec = check_env_vars()
         if missing_rec:
             filtered = [v for v in missing_rec if v != "CHROME_CDP_URL"]
+            if args.skip_gsheet:
+                filtered = [v for v in filtered if v not in ("GOOGLE_SERVICE_ACCOUNT_KEY_PATH", "SPREADSHEET_ID")]
             if "CHROME_CDP_URL" in missing_rec:
                 print("  △ CHROME_CDP_URL 未設定（DevToolsActivePort から自動検出します）")
             if filtered:
@@ -89,13 +103,16 @@ def main():
         print("  - スキップ（playwright 未インストール）")
 
     # 3. Google認証情報
-    print("\n[3/3] Google認証情報...")
-    exists, path = check_google_credentials()
-    if exists:
-        print(f"  ✓ 鍵ファイル: {path}")
+    if args.skip_gsheet:
+        print("\n[3/3] Google認証情報... スキップ（--skip-gsheet）")
     else:
-        errors.append(f"Googleサービスアカウント鍵ファイルを配置: {path}")
-        print(f"  ✗ 鍵ファイルが見つからない: {path}")
+        print("\n[3/3] Google認証情報...")
+        exists, path = check_google_credentials()
+        if exists:
+            print(f"  ✓ 鍵ファイル: {path}")
+        else:
+            errors.append(f"Googleサービスアカウント鍵ファイルを配置: {path}")
+            print(f"  ✗ 鍵ファイルが見つからない: {path}")
 
     # サマリー
     print("\n" + "=" * 50)

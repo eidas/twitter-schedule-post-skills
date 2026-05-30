@@ -1,17 +1,20 @@
 ---
 name: x-batch-poster
 description: >
-  Google SpreadsheetからX.com（Twitter）への投稿予約をバッチ実行するスキル。
+  X.com（Twitter）への投稿予約を実行するスキル。
   Playwrightを使ってX.comのWeb UIから予約投稿を設定する。
   「Spreadsheetの内容をXに予約投稿」「Xにバッチ投稿」「シートから投稿予約」
-  「X投稿をスケジュール」「ツイート予約」などのフレーズで発火する。
-  Google Spreadsheetとの連携、X.comのWeb UI操作、バッチ処理の
+  「X投稿をスケジュール」「ツイート予約」「単発で予約投稿」「1件だけ予約」
+  などのフレーズで発火する。
+  Google Spreadsheetとの連携、X.comのWeb UI操作、バッチ処理、単発投稿の
   いずれかに関わるタスクでもこのスキルを使うこと。
 ---
 
 # X Batch Poster
 
-Google Spreadsheetから投稿データを読み取り、X.comのWeb UI上で予約投稿を設定するスキル。
+X.comのWeb UI上で予約投稿を設定するスキル。
+**バッチモード**（Google Spreadsheetから複数件読み取り）と
+**単発モード**（テキスト・日時を直接指定）の2つの動作モードをサポートする。
 実際の投稿はX.comが予約日時に自動実行する。API非公開の予約機能をPlaywrightで操作する。
 
 ユーザーのChromeブラウザにCDP（Chrome DevTools Protocol）で接続して操作するため、
@@ -71,15 +74,41 @@ SHEET_NAME=Sheet1
 
 ## 実行フロー
 
+### 【単発モード】テキストと日時を直接受け取った場合
+
+ユーザーから投稿テキストと予約日時（+ 任意でメディアパス）を直接受け取ったら以下を実行する。
+Spreadsheetは不要。Googleサービスアカウント認証も不要。
+
+#### Step 1: 環境チェック
+```bash
+uv run python scripts/check_env.py --skip-gsheet
+```
+Chrome が未接続の場合は起動手順を案内して停止。
+
+#### Step 2: 単発投稿実行
+```bash
+uv run python scripts/run_batch.py \
+  --text "投稿テキスト" \
+  --scheduled-at "YYYY-MM-DD HH:MM" \
+  [--media "ファイルパス1,ファイルパス2"]
+```
+
+#### Step 3: 結果報告
+成功 or 失敗を報告する。
+
+---
+
+### 【バッチモード】Spreadsheetから読み取る場合
+
 ユーザーから最大実行行数（デフォルト: 10）を受け取ったら、以下を実行する。
 
-### Step 1: 環境チェック
+#### Step 1: 環境チェック
 ```bash
 uv run python scripts/check_env.py
 ```
 不足があれば指示を出して停止。Chrome が未接続の場合は起動手順を案内する。
 
-### Step 2: バッチ実行
+#### Step 2: バッチ実行
 ```bash
 uv run python scripts/run_batch.py --max-rows <N> --spreadsheet-id <ID> --sheet-name <SHEET>
 ```
@@ -92,7 +121,7 @@ uv run python scripts/run_batch.py --max-rows <N> --spreadsheet-id <ID> --sheet-
 5. 結果を Spreadsheet の status / executed_at / error_detail 列に書き戻す
 6. 最大行数まで 1〜5 を繰り返す
 
-### Step 3: 結果報告
+#### Step 3: 結果報告
 完了後、サマリーを出力する（成功/失敗/スキップの件数）。
 
 ## テスト時の実行フロー

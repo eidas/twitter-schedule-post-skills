@@ -5,6 +5,7 @@ import sys
 import time
 import traceback
 from datetime import datetime, timedelta
+from typing import Optional
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 sys.stderr.reconfigure(encoding="utf-8", errors="replace")
@@ -140,8 +141,61 @@ def test():
         scheduler.stop()
 
 
+def run_single(text: str, scheduled_at_str: str, media: Optional[str] = None):
+    """スプレッドシートを使わず単発で予約投稿を実行する."""
+    row = {
+        "text": text,
+        "scheduled_at": scheduled_at_str,
+        "media_urls": media or "",
+        "row_number": None,
+    }
+    is_valid, skip_reason = validate_row(row)
+    if not is_valid:
+        print(f"エラー: {skip_reason}")
+        sys.exit(1)
+
+    dt = parse_scheduled_at(scheduled_at_str)
+    media_paths = None
+    if media:
+        media_paths = [p.strip() for p in media.split(",") if p.strip()]
+
+    scheduler = XScheduler()
+    try:
+        scheduler.start()
+        print("\nX.com ログイン確認中...")
+        scheduler.ensure_logged_in()
+        print("✓ ログイン確認成功\n")
+
+        last_error = ""
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                scheduler.schedule_post(text=text, scheduled_at=dt, media_paths=media_paths)
+                print("✓ 予約設定完了")
+                return
+            except RuntimeError as e:
+                last_error = str(e)
+                if "ログインを確認していません" in last_error or "ログインされていません" in last_error:
+                    raise
+                if "レートリミット" in last_error or "rate" in last_error.lower():
+                    print(f"  レートリミット検知、{RATE_LIMIT_WAIT}秒待機...")
+                    time.sleep(RATE_LIMIT_WAIT)
+                else:
+                    print(f"  リトライ {attempt}/{MAX_RETRIES}: {last_error}")
+                    if attempt < MAX_RETRIES:
+                        time.sleep(RETRY_DELAY)
+
+        print(f"✗ 失敗: {last_error}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"\n予期しないエラー: {e}")
+        traceback.print_exc()
+        sys.exit(1)
+    finally:
+        scheduler.stop()
+
+
 def main():
-    parser = argparse.ArgumentParser(description="X.com予約投稿バッチ")
+    parser = argparse.ArgumentParser(description="X.com予約投稿バッチ / 単発投稿")
     parser.add_argument(
         "--max-rows", type=int, default=10, help="最大処理行数 (default: 10)"
     )
@@ -158,10 +212,32 @@ def main():
     parser.add_argument(
         "--test", action="store_true", help="テストモード: ログイン確認と1件の予約投稿テストを実行"
     )
+    # 単発投稿オプション
+    parser.add_argument("--text", help="投稿テキスト（単発投稿モード）")
+    parser.add_argument(
+        "--scheduled-at",
+        dest="scheduled_at",
+        help="予約日時 YYYY-MM-DD HH:MM (JST)（単発投稿モード）",
+    )
+    parser.add_argument(
+        "--media",
+        help="メディアファイルパス（カンマ区切り、最大4件）（単発投稿モード）",
+    )
     args = parser.parse_args()
 
     if args.test:
         test()
+        return
+
+    # 単発投稿モード: --text と --scheduled-at が指定されたらスプレッドシート不要
+    if args.text or args.scheduled_at:
+        if not args.text:
+            print("エラー: --text を指定してください")
+            sys.exit(1)
+        if not args.scheduled_at:
+            print("エラー: --scheduled-at を指定してください")
+            sys.exit(1)
+        run_single(args.text, args.scheduled_at, args.media)
         return
 
     if not args.spreadsheet_id:
