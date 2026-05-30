@@ -37,7 +37,32 @@
       "Bash(playwright-cli -s=chrome screenshot --filename=final_compose.png)",
       "Bash(playwright-cli -s=chrome click \"getByRole\\('button', { name: '予約投稿' }\\)\")",
       "Bash(playwright-cli -s=chrome click e1728)",
-      "Bash(playwright-cli -s=chrome screenshot --filename=done.png)"
+      "Bash(playwright-cli -s=chrome screenshot --filename=done.png)",
+      "Bash(find c:/dev/ai_agent/twitter-schedule-post-skills -not -path \"*/.venv/*\" -not -path \"*\\\\\\\\.venv\\\\\\\\*\" -type f)",
+      "Bash(Get-Date -Format \"yyyy-MM-dd HH:mm\")",
+      "PowerShell(playwright-cli attach --cdp=chrome -s=chrome 2>&1)",
+      "PowerShell(Get-Process -Id 13240 2>&1)",
+      "PowerShell(Invoke-WebRequest -Uri \"http://localhost:9222/json/list\" -UseBasicParsing 2>&1)",
+      "PowerShell(playwright-cli -s=chrome tab-select 16 2>&1)",
+      "PowerShell(playwright-cli -s=chrome snapshot --depth=4 2>&1)",
+      "PowerShell(playwright-cli -s=chrome snapshot e19 2>&1)",
+      "PowerShell(playwright-cli -s=chrome click e99 2>&1)",
+      "PowerShell(playwright-cli -s=chrome snapshot 2>&1)",
+      "PowerShell(playwright-cli -s=chrome click e1087 2>&1)",
+      "PowerShell(playwright-cli -s=chrome type \"�e�X�g\" 2>&1)",
+      "PowerShell(playwright-cli -s=chrome click e1152 2>&1)",
+      "PowerShell(playwright-cli -s=chrome select e1367 \"31\" 2>&1)",
+      "PowerShell(playwright-cli -s=chrome select e1383 \"14\" 2>&1)",
+      "PowerShell(playwright-cli -s=chrome select e1385 \"45\" 2>&1)",
+      "PowerShell(playwright-cli -s=chrome click e1350 2>&1)",
+      "PowerShell(playwright-cli -s=chrome click e1536 2>&1)",
+      "PowerShell(playwright-cli -s=chrome press Escape 2>&1)",
+      "PowerShell(playwright-cli -s=chrome eval \"Array.from\\(document.querySelectorAll\\('[data-testid]'\\)\\).filter\\(el => el.tagName === 'BUTTON' || el.getAttribute\\('role'\\) === 'button'\\).map\\(el => el.getAttribute\\('data-testid'\\) + ': ' + \\(el.textContent || ''\\).trim\\(\\).slice\\(0,30\\)\\).join\\('\\\\n'\\)\" 2>&1)",
+      "PowerShell(playwright-cli -s=chrome click \"getByTestId\\('tweetButtonInline'\\)\" 2>&1)",
+      "PowerShell(playwright-cli -s=chrome eval \"el => el.getAttribute\\('data-testid'\\)\" e1907 2>&1)",
+      "PowerShell(playwright-cli -s=chrome click e1907 2>&1)",
+      "PowerShell(playwright-cli -s=chrome goto \"https://x.com/scheduled_posts\" 2>&1)",
+      "PowerShell(playwright-cli -s=chrome goto \"https://x.com/compose/post\" 2>&1)"
     ]
   }
 }

@@ -92,7 +92,8 @@ class XScheduler:
         Raises: RuntimeError if not logged in
         """
         page = self._page
-        page.goto("https://x.com/home", wait_until="networkidle", timeout=30000)
+        # page.goto("https://x.com/home", wait_until="networkidle", timeout=60000)
+        page.goto("https://x.com", wait_until="domcontentloaded")
         time.sleep(2)
 
         if page.query_selector(SELECTORS["home_indicator"]):
@@ -126,7 +127,7 @@ class XScheduler:
         page = self._page
 
         # 投稿作成画面を開く
-        page.goto("https://x.com/compose/tweet", wait_until="networkidle", timeout=20000)
+        page.goto("https://x.com/compose/tweet", wait_until="domcontentloaded")
         time.sleep(2)
 
         # テキスト入力
@@ -181,6 +182,29 @@ class XScheduler:
         UIの変更頻度が高いため、セレクタが見つからない場合は
         代替手段（直接入力など）を試みる。
         """
+        # テキストからセレクタを探す
+        selects_from_text = {
+            "month": ("月", str(dt.month)),
+            "day": ("日", str(dt.day)),
+            "year": ("年", str(dt.year)),
+            "hour": ("時", str(dt.hour)),
+            "minute": ("分", str(dt.minute)),
+        }
+        for field_name, (text, value) in selects_from_text.items():
+            try:
+                el = page.locator('label', has=page.locator('span', has_text=text)).locator('xpath=following-sibling::select[1]')
+                if el:
+                    el.select_option(value=value)
+                    time.sleep(0.3)
+            except PlaywrightTimeout:
+                print(
+                    f"  警告: {field_name}のセレクタが見つかりません。"
+                    f"references/x-selectors.md を確認してください。"
+                )
+                self._try_fallback_datetime_input(page, field_name, value)
+        return
+
+        # フォールバック
         selects = {
             "month": (SELECTORS["schedule_month_select"], str(dt.month)),
             "day": (SELECTORS["schedule_day_select"], str(dt.day)),
@@ -188,7 +212,6 @@ class XScheduler:
             "hour": (SELECTORS["schedule_hour_select"], str(dt.hour)),
             "minute": (SELECTORS["schedule_minute_select"], str(dt.minute)),
         }
-
         for field_name, (selector, value) in selects.items():
             try:
                 el = page.wait_for_selector(selector, timeout=5000)

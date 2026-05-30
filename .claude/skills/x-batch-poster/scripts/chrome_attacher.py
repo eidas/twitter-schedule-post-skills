@@ -48,15 +48,17 @@ class ChromeAttacher:
             return env_url
 
         # 2. チャンネル名 "chrome" → ポートスキャン
-        resolved = ChromeAttacher._resolve_channel("chrome")
-        if resolved:
-            return resolved
+        # resolved = ChromeAttacher._resolve_channel("chrome")
+        # if resolved:
+        #     return resolved
 
         # 3. DevToolsActivePort ファイル
         port_file = ChromeAttacher._devtools_port_file()
         if port_file and port_file.exists():
             port = port_file.read_text().splitlines()[0].strip()
-            return f"http://localhost:{port}"
+            ws_path = port_file.read_text().splitlines()[1].strip()
+            ws_endpoint = f"ws://127.0.0.1:{port}{ws_path}"
+            return ws_endpoint
 
         # 4. デフォルト
         return "http://localhost:9222"
@@ -108,11 +110,11 @@ class ChromeAttacher:
         Raises:
             RuntimeError: Chrome が起動していないか、CDP が無効な場合
         """
-        if not self.is_reachable():
-            raise RuntimeError(
-                f"Chrome に接続できません（{self._cdp_url}）\n"
-                f"{self.launch_hint()}"
-            )
+        # if not self.is_reachable():
+        #     raise RuntimeError(
+        #         f"Chrome に接続できません（{self._cdp_url}）\n"
+        #         f"{self.launch_hint()}"
+        #     )
         try:
             return playwright.chromium.connect_over_cdp(self._cdp_url)
         except Exception as e:
