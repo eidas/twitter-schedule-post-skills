@@ -59,8 +59,8 @@ SHEET_NAME=Sheet1
 
 | 列 | ヘッダー名 | 内容 | 必須 |
 |---|---|---|---|
-| A | text | 投稿テキスト（280文字以内） | ○ |
-| B | scheduled_at | 予約日時 `YYYY-MM-DD HH:MM` (JST) | ○ |
+| A | scheduled_at | 予約日時 `YYYY-MM-DD HH:MM` (JST) | ○ |
+| B | text | 投稿テキスト（280文字以内） | ○ |
 | C | media_urls | 画像/動画URL（カンマ区切り、最大4枚） | × |
 | D | status | 処理状態（後述） | 自動 |
 | E | executed_at | 処理実行日時 | 自動 |

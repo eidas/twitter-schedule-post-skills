@@ -28,6 +28,11 @@ def get_worksheet(
     return spreadsheet.worksheet(sheet_name)
 
 
+def _normalize(record: dict) -> dict:
+    """ヘッダーの末尾スペースを除去してキーを正規化する."""
+    return {k.strip(): v for k, v in record.items()}
+
+
 def fetch_next_pending_row(
     spreadsheet_id: str, sheet_name: str = "Sheet1"
 ) -> Optional[dict]:
@@ -36,8 +41,8 @@ def fetch_next_pending_row(
     Returns:
         {
             "row_number": int,       # 1-indexed (ヘッダー含む)
-            "text": str,
             "scheduled_at": str,
+            "text": str,
             "media_urls": str,
             "status": str,
         }
@@ -47,12 +52,13 @@ def fetch_next_pending_row(
     all_records = ws.get_all_records()
 
     for i, record in enumerate(all_records):
+        record = _normalize(record)
         status = str(record.get("status", "")).strip().lower()
         if status in ("", "pending"):
             return {
                 "row_number": i + 2,  # +1 for 0-index, +1 for header row
-                "text": str(record.get("text", "")),
                 "scheduled_at": str(record.get("scheduled_at", "")),
+                "text": str(record.get("text", "")),
                 "media_urls": str(record.get("media_urls", "")),
                 "status": status,
             }
@@ -89,5 +95,5 @@ def count_pending_rows(
     return sum(
         1
         for r in all_records
-        if str(r.get("status", "")).strip().lower() in ("", "pending")
+        if str(_normalize(r).get("status", "")).strip().lower() in ("", "pending")
     )

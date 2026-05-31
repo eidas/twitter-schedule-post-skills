@@ -62,7 +62,16 @@
       "PowerShell(playwright-cli -s=chrome eval \"el => el.getAttribute\\('data-testid'\\)\" e1907 2>&1)",
       "PowerShell(playwright-cli -s=chrome click e1907 2>&1)",
       "PowerShell(playwright-cli -s=chrome goto \"https://x.com/scheduled_posts\" 2>&1)",
-      "PowerShell(playwright-cli -s=chrome goto \"https://x.com/compose/post\" 2>&1)"
+      "PowerShell(playwright-cli -s=chrome goto \"https://x.com/compose/post\" 2>&1)",
+      "PowerShell(Get-Content \"$env:LOCALAPPDATA\\\\Google\\\\Chrome\\\\User Data\\\\DevToolsActivePort\" -ErrorAction SilentlyContinue; Get-Process chrome -ErrorAction SilentlyContinue | Select-Object Id, ProcessName, MainWindowTitle | Format-Table -AutoSize)",
+      "PowerShell(Invoke-RestMethod -Uri \"http://localhost:9222/json/version\" -TimeoutSec 3 2>&1)",
+      "PowerShell(Invoke-WebRequest -Uri \"http://localhost:9222/\" -TimeoutSec 3 2>&1)",
+      "Bash(Copy-Item credential.json credentials.json)",
+      "PowerShell(Copy-Item credential.json credentials.json)",
+      "PowerShell(Get-Content \"$env:LOCALAPPDATA\\\\Google\\\\Chrome\\\\User Data\\\\DevToolsActivePort\" -ErrorAction SilentlyContinue)",
+      "PowerShell(try { $res = Invoke-WebRequest -Uri \"http://127.0.0.1:9222/json/version\" -TimeoutSec 3; $res.Content } catch { \"接続失敗: $_\" })",
+      "PowerShell(Get-Process -Id 23572)",
+      "PowerShell(tasklist /fi \"pid eq 23572\" 2>&1)"
     ]
   }
 }

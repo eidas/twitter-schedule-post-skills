@@ -92,9 +92,8 @@ class XScheduler:
         Raises: RuntimeError if not logged in
         """
         page = self._page
-        # page.goto("https://x.com/home", wait_until="networkidle", timeout=60000)
-        page.goto("https://x.com", wait_until="domcontentloaded")
-        time.sleep(2)
+        page.goto("https://x.com/home", wait_until="domcontentloaded", timeout=60000)
+        time.sleep(4)
 
         if page.query_selector(SELECTORS["home_indicator"]):
             self._logged_in = True

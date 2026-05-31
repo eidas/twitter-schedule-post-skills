@@ -92,7 +92,15 @@ class ChromeAttacher:
     def _fetch_version_info(cdp_url: str) -> Optional[dict]:
         """/json/version エンドポイントからブラウザ情報を取得する."""
         try:
-            with urllib.request.urlopen(f"{cdp_url}/json/version", timeout=2) as res:
+            parsed = urllib.parse.urlparse(cdp_url)
+            if parsed.scheme in ("ws", "wss"):
+                # ws://localhost:9222/devtools/browser/xxx → http://localhost:9222
+                http_scheme = "https" if parsed.scheme == "wss" else "http"
+                http_url = f"{http_scheme}://{parsed.netloc}/json/version"
+            else:
+                http_url = f"{cdp_url}/json/version"
+
+            with urllib.request.urlopen(http_url, timeout=2) as res:
                 return json.loads(res.read().decode())
         except (urllib.error.URLError, OSError, json.JSONDecodeError):
             return None

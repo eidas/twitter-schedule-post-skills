@@ -24,7 +24,7 @@ def parse_scheduled_at(value: str) -> datetime:
 
     対応フォーマット: YYYY-MM-DD HH:MM, YYYY/MM/DD HH:MM
     """
-    for fmt in ("%Y-%m-%d %H:%M", "%Y/%m/%d %H:%M"):
+    for fmt in ("%Y-%m-%d %H:%M", "%Y/%m/%d %H:%M", "%Y-%m-%d %H:%M:%S", "%Y/%m/%d %H:%M:%S"):
         try:
             return datetime.strptime(value.strip(), fmt)
         except ValueError:
